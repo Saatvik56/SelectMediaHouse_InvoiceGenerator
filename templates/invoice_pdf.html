@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Invoice {{ invoice_no }}</title>
+  <style>
+    /* Page setup */
+    @page { size: A4 portrait; margin: 12mm 12mm 12mm 12mm; } /* Equal margins */
+    html, body { width: 210mm; height: 297mm; }
+    body { font-family: Arial; font-size: 11pt; color:#000; line-height:1.25; }
+
+    /* Printable page border within margins */
+    .page {
+      border: 1px solid #000;         
+      padding: 8mm;                   
+      box-sizing: border-box;         
+      width: calc(100% - 2px);        /* ensure border fully visible */
+      min-height: calc(297mm - 24mm); /* page height minus top+bottom margins */
+    }
+
+    /* Prevent table row splitting */
+    .no-break { break-inside: avoid; page-break-inside: avoid; }
+
+    /* Logo and header */
+    .logo { height: 85px; object-fit: contain; }     
+    .gst { font-size: 10pt; text-align: center; margin-top: 4px; white-space: nowrap; }
+    .addr { white-space: nowrap; }
+    .phone { font-size: 12pt; font-weight: 700; }
+    .tag { display: none; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
+    th { background: #f5f5f5; font-weight: 700; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    .no-border th, .no-border td { border: none; }
+    td, th { overflow-wrap: anywhere; }
+
+    /* Meta grid */
+    .meta-wrap {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      column-gap: 10px;
+      margin-top: 6px;
+    }
+    .meta-left table, .meta-right table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .meta-left td, .meta-right td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
+
+    .meta-left td label { font-weight: 700; }
+    .meta-left td strong { font-size: 12pt; }
+    .meta-left td { font-size: 11pt; }
+
+    .meta-right td label { color: #333; }
+    .meta-right td { font-size: 10pt; background: #fafafa; }
+
+    /* Header layout */
+    .header { display: grid; grid-template-columns: 110px 1fr 180px; column-gap: 12px; align-items: center; margin-bottom: 8px; }
+    .brand h1 { margin: 0; font-size: 24pt; font-weight: 900; }
+    .addr { font-size: 11pt; }
+
+    /* Items column widths */
+    .items th:nth-child(1), .items td:nth-child(1) { width: 7%; text-align: center; }
+    .items th:nth-child(2), .items td:nth-child(2) { width: 37%; }
+    .items th:nth-child(3), .items td:nth-child(3) { width: 12%; }
+    .items th:nth-child(4), .items td:nth-child(4) { width: 8%; text-align: center; }
+    .items th:nth-child(5), .items td:nth-child(5) { width: 8%; text-align: center; }
+    .items th:nth-child(6), .items td:nth-child(6) { width: 14%; text-align: right; }
+    .items th:nth-child(7), .items td:nth-child(7) { width: 14%; text-align: right; }
+
+    /* Utilities */
+    .right { text-align: right; }
+    .center { text-align: center; }
+    .small { font-size: 9pt; }
+    .sign { height: 60px; }
+
+    @media print {
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- Header -->
+    <div class="header no-border">
+      <div>
+        <img class="logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo">
+        <div class="gst">GSTIN: {{ company.gstin }}</div>
+      </div>
+      <div class="brand">
+        <h1 class="center">Select Media House</h1>
+        <div class="center addr">A-6, Sarla Bagh Extension, Dayal Bagh, Agra - 282005&nbsp;(U.P.)</div>
+        <div class="center phone">Mob.: {{ company.phone }}</div>
+      </div>
+      <div class="center">
+        <h2 style="margin:0;">TAX INVOICE</h2>
+      </div>
+    </div>
+
+    <!-- Meta -->
+    <div class="meta-wrap">
+      <div class="meta-left">
+        <table>
+          <tr>
+            <td><label>Invoice Number:</label> <strong>{{ invoice_no }}</strong></td>
+            <td><label>Invoice Date:</label> <strong>{{ invoice_date }}</strong></td>
+          </tr>
+          <tr>
+            <td><label>Buyer Order No:</label> <strong>{{ buyer_order_no }}</strong></td>
+            <td><label>Date &amp; Time of Supply:</label> <strong>{{ supply_date }}</strong></td>
+          </tr>
+        </table>
+      </div>
+      <div class="meta-right">
+        <table>
+          <tr><td><label>Transporter Name:</label> {{ transporter_name }}</td></tr>
+          <tr><td><label>Vehicle No:</label> {{ vehicle_no }}</td></tr>
+          <tr><td><label>GR / RR No:</label> {{ gr_no }}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Parties -->
+    <table style="margin-top:8px;">
+      <tr>
+        <th class="center">Details of Receiver (Billed to)</th>
+        <th class="center">Details of Consignee (Shipped to)</th>
+      </tr>
+      <tr>
+        <td>
+          <div><strong>Name:</strong> {{ billed_to.name }}</div>
+          <div><strong>Address:</strong> {{ billed_to.address }}</div>
+          <div><strong>State:</strong> {{ billed_to.state }} &nbsp; <strong>State Code:</strong> {{ billed_to.state_code }}</div>
+          <div><strong>GSTIN No.:</strong> {{ billed_to.gstin }}</div>
+        </td>
+        <td>
+          <div><strong>Name:</strong> {{ shipped_to.name }}</div>
+          <div><strong>Address:</strong> {{ shipped_to.address }}</div>
+          <div><strong>State:</strong> {{ shipped_to.state }} &nbsp; <strong>State Code:</strong> {{ shipped_to.state_code }}</div>
+          <div><strong>GSTIN No.:</strong> {{ shipped_to.gstin }}</div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Items -->
+    <table class="items" style="margin-top:10px;">
+      <thead>
+        <tr>
+          <th>S. No.</th>
+          <th>DESCRIPTION OF GOODS</th>
+          <th>HSN Code</th>
+          <th>QUANTITY</th>
+          <th>UOM</th>
+          <th>RATE (Rs.)</th>
+          <th>AMOUNT (Rs.)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ it.description }}</td>
+          <td>{{ it.hsn }}</td>
+          <td>{{ it.qty }}</td>
+          <td>{{ it.uom }}</td>
+          <td class="right">{{ '%.2f'|format(it.rate) }}</td>
+          <td class="right">{{ '%.2f'|format(it.amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Totals -->
+    <table style="margin-top:6px;">
+      <tbody>
+        <tr><td style="width:70%;"><strong>Discount</strong></td><td style="width:30%;" class="right">{{ '%.2f'|format(discount) }}</td></tr>
+        <tr><td><strong>Total Value of Supply of Goods Before GST</strong></td><td class="right">{{ '%.2f'|format(subtotal) }}</td></tr>
+        <tr><td><strong>CGST @ {{ '%.2f'|format(cgst_rate) }}%</strong></td><td class="right">{{ '%.2f'|format(cgst_amount) }}</td></tr>
+        <tr><td><strong>SGST @ {{ '%.2f'|format(sgst_rate) }}%</strong></td><td class="right">{{ '%.2f'|format(sgst_amount) }}</td></tr>
+        <tr><td><strong>IGST @ {{ '%.2f'|format(igst_rate) }}%</strong></td><td class="right">{{ '%.2f'|format(igst_amount) }}</td></tr>
+        <tr><td><strong>Total Tax</strong></td><td class="right">{{ '%.2f'|format(total_tax) }}</td></tr>
+        <tr><td><strong>Round off (+/-)</strong></td><td class="right">{{ '%.2f'|format(round_off) }}</td></tr>
+        <tr><td><strong>Grand Total of Invoice</strong></td><td class="right"><strong>{{ '%.2f'|format(grand_total) }}</strong></td></tr>
+      </tbody>
+    </table>
+
+    <!-- Amount in words / ref -->
+    <table class="no-border" style="margin-top:8px;">
+      <tr class="no-border">
+        <td class="no-border" style="width:70%;"><strong>Invoice Total Value in words:</strong> {{ amount_in_words }}</td>
+        <td class="no-border right" style="width:30%;"><strong>Electronic Reference No.:</strong> {{ reference_no }}</td>
+      </tr>
+    </table>
+
+    <!-- Bank + Sign -->
+    <table style="margin-top:10px;">
+      <tr>
+        <td style="width:60%;">
+          <strong>BANK DETAILS</strong><br>
+          <pre style="font-family:inherit; font-size:11pt; margin:4px 0 0 0; white-space:pre-wrap;">{{ company.bank_details }}</pre>
+        </td>
+        <td style="width:40%; text-align:center;">
+          <div>For <strong>{{ company.name }}</strong></div>
+          <div class="sign"></div>
+          <div><strong>Authorised Signatory</strong></div>
+        </td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

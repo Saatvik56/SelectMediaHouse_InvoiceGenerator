@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>New Invoice</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      margin: 0;
+      padding: 30px;
+    }
+
+    .container {
+      background:#EEF2FF;
+      padding: 25px 35px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      width: 600px;
+    }
+
+    h2, h3 {
+      text-align: center;
+      margin-bottom: 15px;
+      color: #333;
+    }
+
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+      color: #444;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    button {
+      display: inline-block;
+      margin-top: 15px;
+      padding: 10px 18px;
+      font-size: 14px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button[type="submit"] {
+      background: #007bff;
+      color: white;
+      width: 100%;
+    }
+
+    button[type="button"] {
+      background: #28a745;
+      color: white;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .section {
+      margin-bottom: 25px;
+      border-top: 1px solid #ddd;
+      padding-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Create New Invoice</h2>
+    <form method="POST">
+
+      <div class="section">
+        <label>Invoice No:</label>
+        <input type="text" name="invoice_no" required>
+
+        <label>Invoice Date:</label>
+        <input type="date" name="invoice_date" required>
+
+        <label>Buyer Order No:</label>
+        <input type="text" name="buyer_order_no">
+
+        <label>Date & Time of Supply:</label>
+        <input type="text" name="supply_date">
+
+        <label>Transporter Name:</label>
+        <input type="text" name="transporter_name">
+
+        <label>Vehicle No:</label>
+        <input type="text" name="vehicle_no">
+
+        <label>GR / RR No:</label>
+        <input type="text" name="gr_no">
+      </div>
+
+      <div class="section">
+        <h3>Billed To</h3>
+        <label>Name:</label>
+        <input type="text" name="client_name" required>
+        <label>Address:</label>
+        <textarea name="client_address"></textarea>
+        <label>State:</label>
+        <input type="text" name="client_state">
+        <label>State Code:</label>
+        <input type="text" name="client_state_code">
+        <label>GSTIN:</label>
+        <input type="text" name="client_gstin">
+      </div>
+
+      <div class="section">
+        <h3>Shipped To</h3>
+        <label>Name:</label>
+        <input type="text" name="ship_name">
+        <label>Address:</label>
+        <textarea name="ship_address"></textarea>
+        <label>State:</label>
+        <input type="text" name="ship_state">
+        <label>State Code:</label>
+        <input type="text" name="ship_state_code">
+        <label>GSTIN:</label>
+        <input type="text" name="ship_gstin">
+      </div>
+
+      <div class="section">
+        <h3>Items</h3>
+        <div id="items">
+          <div>
+            <label>Description:</label>
+            <input type="text" name="item_desc[]" required>
+            <label>HSN:</label>
+            <input type="text" name="item_hsn[]">
+            <label>Quantity:</label>
+            <input type="number" name="item_qty[]" step="0.01" required>
+            <label>UOM:</label>
+            <input type="text" name="item_uom[]">
+            <label>Rate:</label>
+            <input type="number" name="item_rate[]" step="0.01" required>
+          </div>
+        </div>
+        <button type="button" onclick="addItemRow()">+ Add Item</button>
+      </div>
+
+      <div class="section">
+        <h3>GST Details</h3>
+        <label>CGST %:</label>
+        <input type="number" name="cgst_rate" step="0.01" value="9">
+        <label>SGST %:</label>
+        <input type="number" name="sgst_rate" step="0.01" value="9">
+        <label>IGST %:</label>
+        <input type="number" name="igst_rate" step="0.01" value="0">
+      </div>
+      
+      <label>Electronic Reference No.:</label>
+      <input type="text" name="reference_no"><br><br>
+
+
+      <button type="submit">Generate Invoice</button>
+    </form>
+  </div>
+
+  <script>
+    function addItemRow() {
+      let container = document.getElementById("items");
+      let newRow = container.children[0].cloneNode(true);
+      newRow.querySelectorAll("input").forEach(input => input.value = "");
+      container.appendChild(newRow);
+    }
+  </script>
+</body>
+</html>
