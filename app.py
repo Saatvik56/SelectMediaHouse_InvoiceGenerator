@@ -102,10 +102,25 @@ def new_invoice():
                 "amount": qty * rate
             })
 
+        # --- START OF MODIFIED CODE ---
+        # Enforce a fixed number of rows for the items table
+        FIXED_ITEM_ROWS = 8
+        
+        # Truncate if more than 8 items are entered
+        items = items[:FIXED_ITEM_ROWS]
+
+        # Pad with empty items if less than 8
+        while len(items) < FIXED_ITEM_ROWS:
+            items.append({
+                "description": "", "hsn": "", "qty": None,
+                "uom": "", "rate": None, "amount": None
+            })
+        # --- END OF MODIFIED CODE ---
+        
         data["items"] = items
 
         # Do basic totals
-        subtotal = sum(it["amount"] for it in data["items"]) - data["discount"]
+        subtotal = sum(it["amount"] for it in data["items"] if it["amount"] is not None) - data["discount"]
         cgst_amount = subtotal * data["cgst_rate"] / 100
         sgst_amount = subtotal * data["sgst_rate"] / 100
         igst_amount = subtotal * data["igst_rate"] / 100

@@ -5,58 +5,34 @@
   <title>Invoice {{ invoice_no }}</title>
   <style>
     /* Page setup */
-    @page { size: A4 portrait; margin: 12mm 12mm 12mm 12mm; } /* Equal margins */
+    @page { size: A4 portrait; margin: 12mm; }
     html, body { width: 210mm; height: 297mm; }
-    body { font-family: Arial; font-size: 11pt; color:#000; line-height:1.25; }
+    body { font-family: Arial, sans-serif; font-size: 11pt; color:#000; line-height:1.25; }
 
-    /* Printable page border within margins */
     .page {
-      border: 1px solid #000;         
-      padding: 8mm;                   
-      box-sizing: border-box;         
-      width: calc(100% - 2px);        /* ensure border fully visible */
-      min-height: calc(297mm - 24mm); /* page height minus top+bottom margins */
+      border: 1px solid #000;
+      padding: 8mm;
+      box-sizing: border-box;
+      width: calc(100% - 2px);
+      min-height: calc(297mm - 24mm);
     }
 
-    /* Prevent table row splitting */
     .no-break { break-inside: avoid; page-break-inside: avoid; }
 
-    /* Logo and header */
-    .logo { height: 85px; object-fit: contain; }     
+    /* Header */
+    .logo { height: 85px; object-fit: contain; }
     .gst { font-size: 10pt; text-align: center; margin-top: 4px; white-space: nowrap; }
     .addr { white-space: nowrap; }
     .phone { font-size: 12pt; font-weight: 700; }
-    .tag { display: none; }
+    .header { display: grid; grid-template-columns: 110px 1fr 180px; column-gap: 12px; align-items: center; margin-bottom: 8px; }
+    .brand h1 { margin: 0; font-size: 24pt; font-weight: 900; }
 
     /* Tables */
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th, td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
     th { background: #f5f5f5; font-weight: 700; }
-    tr { break-inside: avoid; page-break-inside: avoid; }
-    .no-border th, .no-border td { border: none; }
     td, th { overflow-wrap: anywhere; }
-
-    /* Meta grid */
-    .meta-wrap {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      column-gap: 10px;
-      margin-top: 6px;
-    }
-    .meta-left table, .meta-right table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .meta-left td, .meta-right td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
-
-    .meta-left td label { font-weight: 700; }
-    .meta-left td strong { font-size: 12pt; }
-    .meta-left td { font-size: 11pt; }
-
-    .meta-right td label { color: #333; }
-    .meta-right td { font-size: 10pt; background: #fafafa; }
-
-    /* Header layout */
-    .header { display: grid; grid-template-columns: 110px 1fr 180px; column-gap: 12px; align-items: center; margin-bottom: 8px; }
-    .brand h1 { margin: 0; font-size: 24pt; font-weight: 900; }
-    .addr { font-size: 11pt; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
 
     /* Items column widths */
     .items th:nth-child(1), .items td:nth-child(1) { width: 7%; text-align: center; }
@@ -67,15 +43,51 @@
     .items th:nth-child(6), .items td:nth-child(6) { width: 14%; text-align: right; }
     .items th:nth-child(7), .items td:nth-child(7) { width: 14%; text-align: right; }
 
-    /* Utilities */
+    /* Fixed height layout for items */
+    .items-wrapper {
+      height: 460px; /* Space reserved for exactly 8 rows */
+      overflow: hidden;
+    }
+
+    .items td { height: 55px; } /* consistent height for all 8 rows */
+
+
+/* Empty rows — keep vertical borders, remove horizontal ones */
+.items tr.empty-row td {
+  border-top: none;
+  border-bottom: none;
+}
+
+/* ✅ Force a bottom border on the last table row, even if it's empty */
+.items tbody tr:last-of-type td {
+  border-bottom: 1px solid #000 !important;
+}
+
+/* ✅ As a fallback, also add a bottom border to the table itself */
+.items {
+  border-collapse: collapse;
+  border: 1px solid #000;              /* Ensures outer box always closes */
+  border-left: none; border-right: none; /* Keep only top/bottom borders for the table container */
+}
+
+/* Solid horizontal closing line below items table */
+.items-bottom-line {
+  border-top: 1px solid #000;
+  margin-top: -1px;   /* snug against table */
+  margin-bottom: 4px; /* small gap before totals */
+  width: 100%;
+}
+
+
+    /* Other layouts */
+    .meta-wrap { display: grid; grid-template-columns: 2fr 1fr; column-gap: 10px; margin-top: 6px; }
+    .meta-left td, .meta-right td { border: 1px solid #000; padding: 6px 8px; }
+    .meta-left td label { font-weight: 700; }
     .right { text-align: right; }
     .center { text-align: center; }
-    .small { font-size: 9pt; }
     .sign { height: 60px; }
 
-    @media print {
-      a { color: inherit; text-decoration: none; }
-    }
+    @media print { a { color: inherit; text-decoration: none; } }
   </style>
 </head>
 <body>
@@ -96,7 +108,7 @@
       </div>
     </div>
 
-    <!-- Meta -->
+    <!-- Meta Info -->
     <div class="meta-wrap">
       <div class="meta-left">
         <table>
@@ -112,9 +124,9 @@
       </div>
       <div class="meta-right">
         <table>
-          <tr><td><label>Transporter Name:</label> {{ transporter_name }}</td></tr>
-          <tr><td><label>Vehicle No:</label> {{ vehicle_no }}</td></tr>
-          <tr><td><label>GR / RR No:</label> {{ gr_no }}</td></tr>
+          <tr><td><label><strong>Transporter Name:</strong></label> {{ transporter_name }}</td></tr>
+          <tr><td><label><strong>Vehicle No:</strong></label> {{ vehicle_no }}</td></tr>
+          <tr><td><label><strong>GR / RR No:</strong></label> {{ gr_no }}</td></tr>
         </table>
       </div>
     </div>
@@ -141,34 +153,36 @@
       </tr>
     </table>
 
-    <!-- Items -->
-    <table class="items" style="margin-top:10px;">
-      <thead>
-        <tr>
-          <th>S. No.</th>
-          <th>DESCRIPTION OF GOODS</th>
-          <th>HSN Code</th>
-          <th>QUANTITY</th>
-          <th>UOM</th>
-          <th>RATE (Rs.)</th>
-          <th>AMOUNT (Rs.)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for it in items %}
-        <tr>
-          <td>{{ loop.index }}</td>
-          <td>{{ it.description }}</td>
-          <td>{{ it.hsn }}</td>
-          <td>{{ it.qty }}</td>
-          <td>{{ it.uom }}</td>
-          <td class="right">{{ '%.2f'|format(it.rate) }}</td>
-          <td class="right">{{ '%.2f'|format(it.amount) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
+    <!-- Items Table -->
+    <div class="items-wrapper" style="margin-top:10px;">
+      <table class="items">
+        <thead>
+          <tr>
+            <th>S. No.</th>
+            <th>DESCRIPTION OF GOODS</th>
+            <th>HSN Code</th>
+            <th>QUANTITY</th>
+            <th>UOM</th>
+            <th>RATE (Rs.)</th>
+            <th>AMOUNT (Rs.)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+          <tr class="{{ 'empty-row' if not it.description }}">
+            <td class="center">{{ loop.index if it.description else '' }}</td>
+            <td>{{ it.description }}</td>
+            <td>{{ it.hsn }}</td>
+            <td class="center">{{ it.qty if it.qty is not none else '' }}</td>
+            <td class="center">{{ it.uom }}</td>
+            <td class="right">{{ '%.2f'|format(it.rate) if it.rate is not none else '' }}</td>
+            <td class="right">{{ '%.2f'|format(it.amount) if it.amount is not none else '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="items-bottom-line"></div>
     <!-- Totals -->
     <table style="margin-top:6px;">
       <tbody>
@@ -183,7 +197,7 @@
       </tbody>
     </table>
 
-    <!-- Amount in words / ref -->
+    <!-- Amount in words -->
     <table class="no-border" style="margin-top:8px;">
       <tr class="no-border">
         <td class="no-border" style="width:70%;"><strong>Invoice Total Value in words:</strong> {{ amount_in_words }}</td>
@@ -191,7 +205,7 @@
       </tr>
     </table>
 
-    <!-- Bank + Sign + Note -->
+    <!-- Bank & Signature -->
     <table style="margin-top:10px;" width="100%">
       <tr>
         <td style="width:60%;">
@@ -204,19 +218,15 @@
           <div><strong>Authorised Signatory</strong></div>
         </td>
       </tr>
-      <!-- Add Note Section -->
-       <!-- Note Section -->
-<tr>
-  <td colspan="2"
-      style="border-top: 1px solid black; padding: 15px 16px; font-size: 10pt; line-height: 1.4;">
-    <strong>Note:</strong><br>
-    1. All legal here will be bond for the assignment all issue will be settled AGRA Jurisdiction only.<br>
-    2. If the payment is not made within days the interest @18% per annum will be charged extra.<br>
-    3. All size & quality will be approximate slight variation may cause at the time of printing & finishing.
-  </td>
-</tr>
-
-</table>
+      <tr>
+        <td colspan="2" style="border-top: 1px solid black; padding: 15px 16px; font-size: 10pt; line-height: 1.4;">
+          <strong>Note:</strong><br>
+          1. All legal here will be bond for the assignment all issue will be settled AGRA Jurisdiction only.<br>
+          2. If the payment is not made within days the interest @18% per annum will be charged extra.<br>
+          3. All size & quality will be approximate slight variation may cause at the time of printing & finishing.
+        </td>
+      </tr>
+    </table>
   </div>
 </body>
 </html>
