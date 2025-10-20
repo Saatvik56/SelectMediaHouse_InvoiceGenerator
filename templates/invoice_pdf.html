@@ -66,7 +66,11 @@
   <div class="page">
     <div class="header no-border">
       <div>
-        <img class="logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo">
+        {% if encoded_logo %}
+          <img src="data:image/png;base64,{{ encoded_logo }}" alt="Select Media House" class="logo">
+        {% else %}
+          <div class="logo-placeholder">Logo</div>
+        {% endif %}
         <div class="gst">GSTIN: {{ company.gstin }}</div>
       </div>
       <div class="brand">

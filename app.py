@@ -1,153 +1,177 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, make_response, redirect, url_for, session, flash
 import math
+import base64
+import os
+import json # New import for this fix
+from playwright.sync_api import sync_playwright
+import google.oauth2.credentials
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+import io
 
+# --- CONFIGURATION ---
+app = Flask(__name__)
+app.secret_key = 'your-very-secret-key' # Replace with a real secret key
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
+GDRIVE_FOLDER_ID = '1YE9J44hbLefSuBuwjaTfogIZnD7vl5_m' # IMPORTANT: CHANGE THIS
+
+INVOICE_DATA_CACHE = {}
 
 def number_to_words(n):
-    ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
-            "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
-            "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+    # ... (your existing number_to_words function)
+    ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
     tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
-
     def words(num):
-        if num < 20:
-            return ones[num]
-        elif num < 100:
-            return tens[num // 10] + (" " + ones[num % 10] if num % 10 != 0 else "")
-        elif num < 1000:
-            return ones[num // 100] + " Hundred " + (words(num % 100) if num % 100 != 0 else "")
-        elif num < 100000:
-            return words(num // 1000) + " Thousand " + (words(num % 1000) if num % 1000 != 0 else "")
-        elif num < 10000000:
-            return words(num // 100000) + " Lakh " + (words(num % 100000) if num % 100000 != 0 else "")
-        else:
-            return words(num // 10000000) + " Crore " + (words(num % 10000000) if num % 10000000 != 0 else "")
-
+        if num < 20: return ones[num]
+        elif num < 100: return tens[num // 10] + (" " + ones[num % 10] if num % 10 != 0 else "")
+        elif num < 1000: return ones[num // 100] + " Hundred " + (words(num % 100) if num % 100 != 0 else "")
+        elif num < 100000: return words(num // 1000) + " Thousand " + (words(num % 1000) if num % 1000 != 0 else "")
+        elif num < 10000000: return words(num // 100000) + " Lakh " + (words(num % 100000) if num % 100000 != 0 else "")
+        else: return words(num // 10000000) + " Crore " + (words(num % 10000000) if num % 10000000 != 0 else "")
     return words(n).strip()
 
+def get_invoice_data(form):
+    # ... (your existing get_invoice_data function)
+    data = { "invoice_no": form.get("invoice_no") or "", "invoice_date": form.get("invoice_date") or "", "buyer_order_no": form.get("buyer_order_no") or "", "supply_date": form.get("supply_date") or "", "transporter_name": form.get("transporter_name") or "", "vehicle_no": form.get("vehicle_no"), "gr_no": form.get("gr_no") or "", "company": { "name": "Select Media House", "gstin": "09AFMPG9060R1ZK", "address": "A-6, Sarla Bagh Extension, Dayal Bagh, Agra - 282005 (U.P.)", "phone": "9837346250", "bank_details": "Bank : Canara Bank, MG Road, Agra\nIFSC Code:- CNRB0000192 A/c : 0192201001908" }, "billed_to": { "name": form.get("client_name") or "", "address": form.get("client_address") or "", "state": form.get("client_state") or "", "state_code": form.get("client_state_code") or "", "gstin": form.get("client_gstin") or "" }, "shipped_to": { "name": form.get("ship_name") or "", "address": form.get("ship_address") or "", "state": form.get("ship_state") or "", "state_code": form.get("ship_state_code") or "", "gstin": form.get("ship_gstin") or "" }, "discount": float(form.get("discount", 0)), "subtotal": 0.0, "cgst_rate": float(form.get("cgst_rate", 0)), "sgst_rate": float(form.get("sgst_rate", 0)), "igst_rate": float(form.get("igst_rate", 0)), "cgst_amount": 0.0, "sgst_amount": 0.0, "igst_amount": 0.0, "round_off": 0.0, "grand_total": 0.0, "amount_in_words": "Rupees only", "reference_no": form.get("reference_no") or "N/A", }
+    items = []
+    desc_list, hsn_list, qty_list, uom_list, rate_list = form.getlist("item_desc[]"), form.getlist("item_hsn[]"), form.getlist("item_qty[]"), form.getlist("item_uom[]"), form.getlist("item_rate[]")
+    for i in range(len(desc_list)):
+        if desc_list[i].strip() == "": continue
+        qty, rate = float(qty_list[i] or 0), float(rate_list[i] or 0)
+        items.append({ "description": desc_list[i], "hsn": hsn_list[i], "qty": qty, "uom": uom_list[i], "rate": rate, "amount": qty * rate })
+    FIXED_ITEM_ROWS = 8
+    items = items[:FIXED_ITEM_ROWS]
+    while len(items) < FIXED_ITEM_ROWS: items.append({ "description": "", "hsn": "", "qty": None, "uom": "", "rate": None, "amount": None })
+    data["items"] = items
+    subtotal = sum(it["amount"] for it in data["items"] if it["amount"] is not None) - data["discount"]
+    cgst_amount, sgst_amount, igst_amount = subtotal * data["cgst_rate"] / 100, subtotal * data["sgst_rate"] / 100, subtotal * data["igst_rate"] / 100
+    grand_total = subtotal + cgst_amount + sgst_amount + igst_amount
+    rounded_total = math.floor(grand_total)
+    round_off = rounded_total - grand_total
+    data.update({ "subtotal": subtotal, "cgst_amount": cgst_amount, "sgst_amount": sgst_amount, "igst_amount": igst_amount, "grand_total": rounded_total, "total_tax": cgst_amount + sgst_amount + igst_amount, "round_off": round_off, "amount_in_words": f" {number_to_words(int(rounded_total))} Rupees Only" })
+    logo_path = os.path.join(app.root_path, 'static', 'img', 'logo.png')
+    try:
+        with open(logo_path, "rb") as image_file: data["encoded_logo"] = base64.b64encode(image_file.read()).decode('utf-8')
+    except FileNotFoundError:
+        data["encoded_logo"] = None
+        print(f"Warning: Logo file not found at {logo_path}")
+    return data
 
-app = Flask(__name__)
-
+# --- Standard Routes ---
 @app.route("/")
 def home():
     return '<h2>Welcome! Go to <a href="/new-invoice">New Invoice</a></h2>'
 
-# Route for form
 @app.route("/new-invoice", methods=["GET", "POST"])
 def new_invoice():
     if request.method == "POST":
-        # Collect form data (without items first)
-        data = {
-            "invoice_no": request.form.get("invoice_no") or "",
-            "invoice_date": request.form.get("invoice_date")or "",
-            "buyer_order_no": request.form.get("buyer_order_no")or "",
-            "supply_date": request.form.get("supply_date")or "",
-            "transporter_name": request.form.get("transporter_name")or "",
-            "vehicle_no": request.form.get("vehicle_no"),
-            "gr_no": request.form.get("gr_no")or "",
-            "company": {
-                "name": "Select Media House",
-                "gstin": "09AFMPG9060R1ZK",
-                "address": "A-6, Sarla Bagh Extension, Dayal Bagh, Agra - 282005 (U.P.)",
-                "phone": "9837346250",
-                "bank_details": "Bank : Canara Bank, MG Road, Agra\nIFSC Code:- CNRB0000192 A/c : 0192201001908"
-            },
-            "billed_to": {
-                "name": request.form.get("client_name")or "",
-                "address": request.form.get("client_address")or "",
-                "state": request.form.get("client_state")or "",
-                "state_code": request.form.get("client_state_code")or "",
-                "gstin": request.form.get("client_gstin")or ""
-            },
-            "shipped_to": {
-                "name": request.form.get("ship_name")or "",
-                "address": request.form.get("ship_address")or "",
-                "state": request.form.get("ship_state")or "",
-                "state_code": request.form.get("ship_state_code")or "",
-                "gstin": request.form.get("ship_gstin")or ""
-            },
-            "discount": float(request.form.get("discount", 0)),
-            "subtotal": 0.0,
-            "cgst_rate": float(request.form.get("cgst_rate", 0)),
-            "sgst_rate": float(request.form.get("sgst_rate", 0)),
-            "igst_rate": float(request.form.get("igst_rate", 0)),
-            "cgst_amount": 0.0,
-            "sgst_amount": 0.0,
-            "igst_amount": 0.0,
-            "round_off": 0.0,
-            "grand_total": 0.0,
-            "amount_in_words": "Rupees only",
-            "reference_no": request.form.get("reference_no") or "N/A",
+        invoice_data = get_invoice_data(request.form)
+        invoice_no = invoice_data["invoice_no"]
+        INVOICE_DATA_CACHE[invoice_no] = invoice_data
+        return redirect(url_for('preview_invoice', invoice_no=invoice_no))
+    return render_template("new_invoice.html", invoice_data={})
 
-        }
+@app.route("/edit-invoice/<invoice_no>")
+def edit_invoice(invoice_no):
+    invoice_data = INVOICE_DATA_CACHE.get(invoice_no)
+    if not invoice_data: return "Invoice data not found.", 404
+    return render_template("new_invoice.html", invoice_data=invoice_data)
 
-        # ✅ Now handle multiple items
-        items = []
-        desc_list = request.form.getlist("item_desc[]")
-        hsn_list = request.form.getlist("item_hsn[]")
-        qty_list = request.form.getlist("item_qty[]")
-        uom_list = request.form.getlist("item_uom[]")
-        rate_list = request.form.getlist("item_rate[]")
+@app.route("/preview/<invoice_no>")
+def preview_invoice(invoice_no):
+    invoice_data = INVOICE_DATA_CACHE.get(invoice_no)
+    if not invoice_data: return "Invoice data not found.", 404
+    invoice_html = render_template("invoice_pdf.html", **invoice_data)
+    return render_template("preview.html", invoice_no=invoice_no, invoice_html=invoice_html)
 
-        for i in range(len(desc_list)):
-            if desc_list[i].strip() == "":
-                continue  # skip empty rows
-            qty = float(qty_list[i] or 0)
-            rate = float(rate_list[i] or 0)
-            items.append({
-                "description": desc_list[i],
-                "hsn": hsn_list[i],
-                "qty": qty,
-                "uom": uom_list[i],
-                "rate": rate,
-                "amount": qty * rate
-            })
+@app.route("/generate-pdf/<invoice_no>")
+def generate_pdf(invoice_no):
+    invoice_data = INVOICE_DATA_CACHE.get(invoice_no)
+    if not invoice_data: return "Invoice data not found.", 404
+    rendered_html = render_template("invoice_pdf.html", **invoice_data)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.set_content(rendered_html)
+        pdf_content = page.pdf(format='A4', print_background=True)
+        browser.close()
+    invoice_filename = f"{invoice_data['invoice_no']}_{invoice_data['invoice_date']}.pdf"
+    response = make_response(pdf_content)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename={invoice_filename}'
+    return response
 
-        # --- START OF MODIFIED CODE ---
-        # Enforce a fixed number of rows for the items table
-        FIXED_ITEM_ROWS = 8
-        
-        # Truncate if more than 8 items are entered
-        items = items[:FIXED_ITEM_ROWS]
+# --- GOOGLE DRIVE ROUTES (NOW FIXED) ---
+@app.route('/authorize/<invoice_no>')
+def authorize(invoice_no):
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    client_secrets_path = os.path.join(basedir, "client_secret.json")
+    with open(client_secrets_path, 'r') as f:
+        client_config = json.load(f)
+    
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        redirect_uri=url_for('oauth2callback', _external=True)
+    )
+    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
+    session['state'] = state
+    session['upload_invoice_no'] = invoice_no
+    return redirect(authorization_url)
 
-        # Pad with empty items if less than 8
-        while len(items) < FIXED_ITEM_ROWS:
-            items.append({
-                "description": "", "hsn": "", "qty": None,
-                "uom": "", "rate": None, "amount": None
-            })
-        # --- END OF MODIFIED CODE ---
-        
-        data["items"] = items
+@app.route('/oauth2callback')
+def oauth2callback():
+    state = session.get('state')
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    client_secrets_path = os.path.join(basedir, "client_secret.json")
+    with open(client_secrets_path, 'r') as f:
+        client_config = json.load(f)
 
-        # Do basic totals
-        subtotal = sum(it["amount"] for it in data["items"] if it["amount"] is not None) - data["discount"]
-        cgst_amount = subtotal * data["cgst_rate"] / 100
-        sgst_amount = subtotal * data["sgst_rate"] / 100
-        igst_amount = subtotal * data["igst_rate"] / 100
-        grand_total = subtotal + cgst_amount + sgst_amount + igst_amount
-        total_tax = cgst_amount + sgst_amount + igst_amount
-        # Round off logic (truncate paise, no extra charge)
-        rounded_total = math.floor(grand_total)   # always lower or equal
-        round_off = rounded_total - grand_total
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        state=state,
+        redirect_uri=url_for('oauth2callback', _external=True)
+    )
+    flow.fetch_token(authorization_response=request.url)
+    credentials = flow.credentials
+    session['credentials'] = {
+        'token': credentials.token, 'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri, 'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret, 'scopes': credentials.scopes
+    }
+    return redirect(url_for('upload_to_drive', invoice_no=session.get('upload_invoice_no')))
 
+@app.route('/upload-to-drive/<invoice_no>')
+def upload_to_drive(invoice_no):
+    if 'credentials' not in session:
+        return redirect(url_for('authorize', invoice_no=invoice_no))
+    credentials = google.oauth2.credentials.Credentials(**session['credentials'])
+    invoice_data = INVOICE_DATA_CACHE.get(invoice_no)
+    if not invoice_data:
+        flash("Invoice data expired. Please generate it again.", "error")
+        return redirect(url_for('new_invoice'))
+    rendered_html = render_template("invoice_pdf.html", **invoice_data)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.set_content(rendered_html)
+        pdf_content = page.pdf(format='A4', print_background=True)
+        browser.close()
+    try:
+        service = build('drive', 'v3', credentials=credentials)
+        invoice_filename = f"{invoice_data['invoice_no']}_{invoice_data['invoice_date']}.pdf"
+        file_metadata = {'name': invoice_filename, 'parents': [GDRIVE_FOLDER_ID]}
+        media = MediaIoBaseUpload(io.BytesIO(pdf_content), mimetype='application/pdf')
+        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        flash(f"Successfully uploaded '{invoice_filename}' to Google Drive!", "success")
+    except Exception as e:
+        flash(f"An error occurred during upload: {e}", "error")
 
-
-        # Update
-        data["subtotal"] = subtotal
-        data["cgst_amount"] = cgst_amount
-        data["sgst_amount"] = sgst_amount
-        data["igst_amount"] = igst_amount
-        data["grand_total"] = rounded_total
-        data["total_tax"] = total_tax
-        data["round_off"] = round_off
-        data["amount_in_words"] = f" {number_to_words(int(rounded_total))} Rupees Only"
-
-
-        return render_template("invoice_pdf.html", **data)
-
-    # If GET → show the form
-    return render_template("new_invoice.html")
-
+    return redirect(url_for('preview_invoice', invoice_no=invoice_no))
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5000)
