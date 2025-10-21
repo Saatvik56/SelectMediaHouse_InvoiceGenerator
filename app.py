@@ -159,7 +159,7 @@ def upload_to_drive(invoice_no):
         browser = p.chromium.launch()
         page = browser.new_page()
         page.set_content(rendered_html)
-        pdf_content = page.pdf(format='A4', print_background=True)
+        pdf_content = page.pdf(format='A4', print_background=True, timeout=60000)
         browser.close()
     try:
         service = build('drive', 'v3', credentials=credentials)
