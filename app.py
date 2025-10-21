@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, make_response, redirect, url_for, session, flash
-from functools import wraps # Needed if using password protection
+# Removed functools import as password protection is skipped
 import math
 import base64
 import os
@@ -16,13 +16,13 @@ from playwright.sync_api import sync_playwright
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
-app.secret_key = 'your-very-strong-secret-key-here'  # Change this to a random string
+app.secret_key = '1234567890'  # Change this to a random string
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # Google Drive Configuration
 CLIENT_SECRETS_FILE = "client_secret.json"
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
-GDRIVE_FOLDER_ID = 'YOUR_REGULAR_FOLDER_ID_HERE'  # Make sure this is your folder ID
+GDRIVE_FOLDER_ID = '1YE9J44hbLefSuBuwjaTfogIZnD7vl5_m'  # Make sure this is your folder ID
 
 INVOICE_DATA_CACHE = {}
 
@@ -68,23 +68,30 @@ def get_invoice_data(form):
 # --- APPLICATION ROUTES ---
 @app.route("/")
 def home():
-    # If using password, redirect to password prompt if not logged in
-    # if 'logged_in' not in session:
-    #     return redirect(url_for('password_prompt'))
-    return '<h2>Welcome! Go to <a href="/new-invoice">New Invoice</a></h2>' # Add logout link if needed
+    return '<h2>Welcome! Go to <a href="/new-invoice">New Invoice</a></h2>'
 
 @app.route("/new-invoice", methods=["GET", "POST"])
-# @login_required # Uncomment if using password
 def new_invoice():
     if request.method == "POST":
         invoice_data = get_invoice_data(request.form)
         invoice_no = invoice_data["invoice_no"]
         INVOICE_DATA_CACHE[invoice_no] = invoice_data
         return redirect(url_for('preview_invoice', invoice_no=invoice_no))
+    # Pass empty data for a fresh form
     return render_template("new_invoice.html", invoice_data={})
 
+# --- ADD THIS ROUTE BACK ---
+@app.route("/edit-invoice/<invoice_no>")
+def edit_invoice(invoice_no):
+    invoice_data = INVOICE_DATA_CACHE.get(invoice_no)
+    if not invoice_data:
+        flash("Invoice data not found or expired. Please create it again.", "error")
+        return redirect(url_for('new_invoice'))
+    # Render the form, passing the existing data
+    return render_template("new_invoice.html", invoice_data=invoice_data)
+# --- END OF ADDED ROUTE ---
+
 @app.route("/preview/<invoice_no>")
-# @login_required # Uncomment if using password
 def preview_invoice(invoice_no):
     invoice_data = INVOICE_DATA_CACHE.get(invoice_no)
     if not invoice_data:
@@ -94,7 +101,6 @@ def preview_invoice(invoice_no):
     return render_template("preview.html", invoice_no=invoice_no, invoice_html=invoice_html)
 
 @app.route("/generate-pdf/<invoice_no>")
-# @login_required # Uncomment if using password
 def generate_pdf(invoice_no):
     invoice_data = INVOICE_DATA_CACHE.get(invoice_no)
     if not invoice_data: return "Invoice data not found.", 404
@@ -112,14 +118,12 @@ def generate_pdf(invoice_no):
             print(f"[{time.time()}] Page created. Setting content...")
             page.set_content(rendered_html)
             print(f"[{time.time()}] Content set. Generating PDF (timeout=90000ms)...")
-            # --- Increased Timeout Here ---
             pdf_content = page.pdf(format='A4', print_background=True, timeout=90000)
             print(f"[{time.time()}] PDF generated successfully.")
             browser.close()
             print(f"[{time.time()}] Browser closed.")
     except Exception as e:
         print(f"[{time.time()}] ERROR during PDF generation: {e}")
-        # Optionally, return a user-friendly error page or message
         return f"Error generating PDF: {e}", 500
 
     if pdf_content is None:
@@ -133,7 +137,6 @@ def generate_pdf(invoice_no):
 
 # --- GOOGLE DRIVE FLOW ---
 @app.route('/authorize/<invoice_no>')
-# @login_required # Uncomment if using password
 def authorize(invoice_no):
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
@@ -162,7 +165,6 @@ def oauth2callback():
     return redirect(url_for('upload_to_drive', invoice_no=session.get('upload_invoice_no')))
 
 @app.route('/upload-to-drive/<invoice_no>')
-# @login_required # Uncomment if using password
 def upload_to_drive(invoice_no):
     if 'credentials' not in session:
         return redirect(url_for('authorize', invoice_no=invoice_no))
@@ -186,7 +188,6 @@ def upload_to_drive(invoice_no):
             print(f"[{time.time()}] Page created (upload). Setting content...")
             page.set_content(rendered_html)
             print(f"[{time.time()}] Content set (upload). Generating PDF (timeout=90000ms)...")
-            # --- Increased Timeout Here ---
             pdf_content = page.pdf(format='A4', print_background=True, timeout=90000)
             print(f"[{time.time()}] PDF generated successfully (upload).")
             browser.close()
@@ -215,10 +216,6 @@ def upload_to_drive(invoice_no):
     except Exception as e:
         print(f"[{time.time()}] ERROR during Google Drive upload: {e}")
         flash(f"An error occurred during upload: {e}", "error")
-
-    # Keep data in cache for preview refresh
-    # if invoice_no in INVOICE_DATA_CACHE:
-    #     del INVOICE_DATA_CACHE[invoice_no]
 
     return redirect(url_for('preview_invoice', invoice_no=invoice_no))
 
